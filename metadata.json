@@ -1,0 +1,5 @@
+{
+  "name": "Rowing Biomechanics Analyzer",
+  "description": "A mathematical modeling tool to analyze the biomechanics of a single scull rower, focusing on stroke efficiency and speed impact.",
+  "requestFramePermissions": []
+}
