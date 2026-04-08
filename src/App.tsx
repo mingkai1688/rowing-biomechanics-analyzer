@@ -35,7 +35,7 @@ export default function App() {
   });
 
   const results = useMemo(() => simulateStroke(anatomy, setup, params), [anatomy, setup, params]);
-  const sensitivities = useMemo(() => calculateSensitivity(results), [results]);
+  const sensitivities = useMemo(() => calculateSensitivity(results, anatomy, setup, params), [results, anatomy, setup, params]);
 
   const zeroSlipPoints = useMemo(() => {
     // Find all points where slip becomes positive during drive phases

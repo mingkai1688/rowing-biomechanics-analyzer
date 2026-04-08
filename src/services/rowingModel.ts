@@ -1,147 +1,195 @@
 import { RowerAnatomy, BoatSetup, StrokeParams, SimulationResult, SensitivityResult } from '../types';
 
 const RHO = 1000; // Water density kg/m^3
-const BLADE_AREA = 0.12; // m^2
-const HULL_DRAG_K = 3.5; // Hull drag coefficient
+const BLADE_AREA = 0.12; // m^2 (Smoothie/Macon style)
 const BOAT_MASS = 14; // kg (Single scull)
 const ROWER_MASS = 85; // kg
+const ADDED_MASS = 10; // kg (Entrained water virtual mass)
+const I_OAR = 1.5; // kg m^2 (Oar moment of inertia)
+const L_SLIDE = 0.7; // m (Seat slide length)
 
 export function simulateStroke(
   anatomy: RowerAnatomy,
   setup: BoatSetup,
-  params: StrokeParams
+  params: StrokeParams,
+  forceMultiplier: { catch: number, mid: number, finish: number } = { catch: 1, mid: 1, finish: 1 }
 ): SimulationResult[] {
   const results: SimulationResult[] = [];
   const T = 60 / params.strokeRate;
-  const dt = 0.01;
+  const dt = 0.002;
   
   const catchRad = (params.catchAngle * Math.PI) / 180;
   const finishRad = (params.finishAngle * Math.PI) / 180;
   const totalAngle = catchRad - finishRad;
-  
-  // Dynamic drive ratio: Drive percentage increases as stroke rate increases
-  // Approx 0.35 at 20 spm, 0.45 at 40 spm
-  const driveRatio = Math.min(0.5, Math.max(0.3, 0.35 + (params.strokeRate - 20) * 0.005));
-  const driveTime = T * driveRatio;
-  const recoveryTime = T * (1 - driveRatio);
 
-  let currentBoatVel = 0; // Start from rest to see acceleration
+  let vb = 0; // Start from rest
+  let t_global = 0;
 
   for (let cycle = 0; cycle < params.cycles; cycle++) {
-    const cycleStartTime = cycle * T;
-    for (let t_cycle = 0; t_cycle < T; t_cycle += dt) {
-      const t = cycleStartTime + t_cycle;
-      let oarAngle = 0;
-      let handleVel = 0;
-      let propForce = 0;
-      let liftForce = 0;
-      let dragForce = 0;
-      let phase: SimulationResult['phase'] = 'Recovery';
+    let theta = catchRad;
+    let omega = 0;
+    let t_cycle = 0;
+    
+    // 1. DRIVE PHASE (Dynamic Integration)
+    const driveResults: SimulationResult[] = [];
+    // We integrate until the oar angle reaches the finish angle, preserving geometric constraints
+    while (theta > finishRad && t_cycle < T) {
+      const progress = (catchRad - theta) / totalAngle;
+      
+      let phaseMul = 1;
+      let phase: SimulationResult['phase'] = 'Catch';
+      if (progress < 0.33) { phase = 'Catch'; phaseMul = forceMultiplier.catch; }
+      else if (progress < 0.66) { phase = 'Mid-Drive'; phaseMul = forceMultiplier.mid; }
+      else { phase = 'Finish'; phaseMul = forceMultiplier.finish; }
 
-      if (t_cycle <= driveTime) {
-        // Drive Phase
-        const progress = t_cycle / driveTime;
-        oarAngle = catchRad - progress * totalAngle;
+      // Force-driven handle input: modified sine to avoid 0 initial force
+      const F_handle = params.maxHandleForce * phaseMul * Math.sin(Math.PI * (progress * 0.9 + 0.05));
       
-      // Scale handle velocity by maxHandleForce (normalized to a reference of 600N)
-      const forceScale = params.maxHandleForce / 600;
-      handleVel = 1.8 * forceScale * Math.sin(Math.PI * progress); 
+      // Blade Kinematics
+      const U_norm = -vb * Math.cos(theta) + setup.outboard * omega;
+      const U_chord = -vb * Math.sin(theta);
+      const V = Math.sqrt(U_norm * U_norm + U_chord * U_chord);
+      const alpha = V === 0 ? 0 : Math.atan2(Math.abs(U_norm), Math.abs(U_chord));
       
-      const bladeVelBoat = (setup.outboard / setup.inboard) * handleVel;
-      const vRel = bladeVelBoat - currentBoatVel * Math.cos(oarAngle);
+      // Hydrodynamic Coefficients (Caplan & Gardner approximations)
+      const C_N = 1.5 * Math.sin(alpha);
+      const C_T = 0.1 * Math.cos(alpha);
       
-      // Slip is the difference between blade velocity and boat velocity
-      const slip = vRel;
+      // Hydrodynamic Forces
+      const F_norm = 0.5 * RHO * BLADE_AREA * V * V * C_N * Math.sign(U_norm);
+      const F_tang = 0.5 * RHO * BLADE_AREA * V * V * C_T * Math.sign(U_chord);
+      const F_wx = F_norm * Math.cos(theta) - Math.abs(F_tang) * Math.sin(theta);
+      
+      // Oar rotational acceleration (solves handle velocity rather than prescribing it)
+      const domega = (F_handle * setup.inboard - F_norm * setup.outboard) / I_OAR;
+      
+      // Rower internal inertial force (a_r is acceleration of rower relative to boat)
+      const ar = L_SLIDE * (domega / totalAngle);
+      
+      // Advanced Hull Drag: Skin friction (v^1.85) + Wave making (v^4)
+      const hullDrag = 2.5 * Math.pow(Math.max(0, vb), 1.85) + 0.05 * Math.pow(Math.max(0, vb), 4);
+      
+      // Coupled Two-Body System Acceleration
+      const netForce = 2 * F_wx - hullDrag - ROWER_MASS * ar;
+      const dvb = netForce / (BOAT_MASS + ROWER_MASS + ADDED_MASS);
 
-      // Coefficients based on angle
-      const alpha = Math.abs(oarAngle);
-      const Cd = 1.2 * Math.cos(oarAngle);
-      const Cl = 0.8 * Math.sin(Math.PI * progress); // Lift peaks at ends
-
-      const baseForce = 0.5 * RHO * BLADE_AREA * Math.pow(Math.abs(vRel), 2);
-      
-      if (vRel > 0) {
-        liftForce = baseForce * Cl * Math.sin(oarAngle);
-        dragForce = baseForce * Cd * Math.cos(oarAngle);
-        propForce = liftForce + dragForce;
-      } else {
-        // Braking force (backwatering)
-        propForce = -baseForce * Cd * Math.cos(oarAngle);
+      if (Math.round(t_cycle * 1000) % 10 === 0) {
+        driveResults.push({
+          time: t_global,
+          oarAngle: (theta * 180) / Math.PI,
+          handleVelocity: omega * setup.inboard,
+          bladeVelocity: omega * setup.outboard,
+          propulsiveForce: 2 * F_wx,
+          liftForce: F_norm,
+          dragForce: Math.abs(F_tang),
+          hullDrag: hullDrag,
+          netForce: netForce,
+          slip: U_norm,
+          boatVelocity: vb,
+          phase
+        });
       }
 
-      if (progress < 0.2) phase = 'Catch';
-      else if (progress < 0.8) phase = 'Mid-Drive';
-      else phase = 'Finish';
-    } else {
-      // Recovery Phase
-      const progress = (t_cycle - driveTime) / recoveryTime;
-      oarAngle = finishRad + progress * totalAngle;
-      phase = 'Recovery';
-      propForce = 0;
-      liftForce = 0;
-      dragForce = 0;
+      omega += domega * dt;
+      theta -= omega * dt; // theta decreases during drive (bow towards stern)
+      vb += dvb * dt;
+      t_cycle += dt;
+      t_global += dt;
     }
 
-    // Slip is the relative velocity of the blade through the water
-    const bladeVelBoat = (setup.outboard / setup.inboard) * handleVel;
-    const slip = bladeVelBoat - currentBoatVel * Math.cos(oarAngle);
+    const driveTime = t_cycle;
+    const recoveryTime = Math.max(0.1, T - driveTime);
+    
+    // 2. RECOVERY PHASE (Kinematic Return)
+    const recResults: SimulationResult[] = [];
+    for (let t_rec = 0; t_rec < recoveryTime; t_rec += dt) {
+      const phi = Math.PI * (t_rec / recoveryTime);
+      
+      // Kinematic seat acceleration (creates the characteristic velocity ripple)
+      const ar = -(L_SLIDE / 2) * Math.pow(Math.PI / recoveryTime, 2) * Math.cos(phi);
+      
+      const hullDrag = 2.5 * Math.pow(Math.max(0, vb), 1.85) + 0.05 * Math.pow(Math.max(0, vb), 4);
+      
+      // Positive surge early recovery, negative 'check' late recovery
+      const netForce = -hullDrag - ROWER_MASS * ar; 
+      const dvb = netForce / (BOAT_MASS + ROWER_MASS + ADDED_MASS);
+      
+      const currentTheta = finishRad + totalAngle * 0.5 * (1 - Math.cos(phi));
+      const currentOmega = -(totalAngle / 2) * (Math.PI / recoveryTime) * Math.sin(phi);
 
-    // System Dynamics
-    const hullDrag = HULL_DRAG_K * Math.pow(currentBoatVel, 2);
-    const netForce = 2 * propForce - hullDrag;
-    const accel = netForce / (BOAT_MASS + ROWER_MASS);
-    currentBoatVel += accel * dt;
+      if (Math.round(t_rec * 1000) % 10 === 0) {
+        recResults.push({
+          time: t_global,
+          oarAngle: (currentTheta * 180) / Math.PI,
+          handleVelocity: currentOmega * setup.inboard,
+          bladeVelocity: currentOmega * setup.outboard,
+          propulsiveForce: 0,
+          liftForce: 0,
+          dragForce: 0,
+          hullDrag: hullDrag,
+          netForce: netForce,
+          slip: -vb * Math.cos(currentTheta), // Rough slip estimate out of water
+          boatVelocity: vb,
+          phase: 'Recovery'
+        });
+      }
 
-    results.push({
-      time: t,
-      oarAngle: (oarAngle * 180) / Math.PI,
-      handleVelocity: handleVel,
-      bladeVelocity: (setup.outboard / setup.inboard) * handleVel,
-      propulsiveForce: propForce,
-      liftForce: liftForce,
-      dragForce: dragForce,
-      hullDrag: hullDrag,
-      netForce: netForce,
-      slip: slip,
-      boatVelocity: currentBoatVel,
-      phase
-    });
+      vb += dvb * dt;
+      t_global += dt;
     }
+
+    results.push(...driveResults, ...recResults);
   }
 
   return results;
 }
 
-export function calculateSensitivity(results: SimulationResult[]): SensitivityResult[] {
-  const phases = ['Catch', 'Mid-Drive', 'Finish', 'Recovery'];
-  const impulseByPhase: Record<string, number> = {};
+export function calculateSensitivity(
+  results: SimulationResult[], 
+  anatomy: RowerAnatomy, 
+  setup: BoatSetup, 
+  params: StrokeParams
+): SensitivityResult[] {
+  // Extract steady-state (last cycle) average velocity
+  const getSpeed = (res: SimulationResult[]) => {
+    const lastCycle = res.filter(r => r.time >= Math.max(0, (params.cycles - 1)) * (60 / params.strokeRate));
+    if (lastCycle.length === 0) return 0;
+    return lastCycle.reduce((sum, r) => sum + r.boatVelocity, 0) / lastCycle.length;
+  };
   
-  results.forEach(r => {
-    impulseByPhase[r.phase] = (impulseByPhase[r.phase] || 0) + r.propulsiveForce * 0.01;
-  });
+  const baseSpeed = getSpeed(results);
 
-  const totalImpulse = Object.values(impulseByPhase).reduce((a, b) => a + b, 0);
+  // Perturbation runs (+5% force in specific phases)
+  const resCatch = simulateStroke(anatomy, setup, params, { catch: 1.05, mid: 1.0, finish: 1.0 });
+  const resMid = simulateStroke(anatomy, setup, params, { catch: 1.0, mid: 1.05, finish: 1.0 });
+  const resFinish = simulateStroke(anatomy, setup, params, { catch: 1.0, mid: 1.0, finish: 1.05 });
+
+  const sCatch = Math.max(0, getSpeed(resCatch) - baseSpeed);
+  const sMid = Math.max(0, getSpeed(resMid) - baseSpeed);
+  const sFinish = Math.max(0, getSpeed(resFinish) - baseSpeed);
+  
+  const totalS = sCatch + sMid + sFinish + 0.0001; // Avoid div zero
 
   return [
     {
       phase: 'Catch',
-      sensitivity: 0.45,
-      description: 'Highest impact due to low initial speed and non-linear drag. Efficient lift generation here is critical.'
+      sensitivity: sCatch / totalS,
+      description: 'Impact of early drive force. Derived dynamically from a +5% perturbation run.'
     },
     {
       phase: 'Mid-Drive',
-      sensitivity: 0.30,
-      description: 'Highest raw power, but significant energy is lost to exponential hull drag at higher speeds.'
+      sensitivity: sMid / totalS,
+      description: 'Impact of peak power phase. Derived dynamically from a +5% perturbation run.'
     },
     {
       phase: 'Finish',
-      sensitivity: 0.20,
-      description: 'Critical for maintaining momentum. Late extraction causes massive braking drag.'
+      sensitivity: sFinish / totalS,
+      description: 'Impact of late drive force. Derived dynamically from a +5% perturbation run.'
     },
     {
       phase: 'Recovery',
-      sensitivity: 0.05,
-      description: 'Impacts speed through inertial management and preparation for the next catch.'
+      sensitivity: 0.05, // Fixed reference
+      description: 'Recovery affects momentum via inertial surge and check, modeled as a fixed baseline sensitivity.'
     }
   ];
 }
