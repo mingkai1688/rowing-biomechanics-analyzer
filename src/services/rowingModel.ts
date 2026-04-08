@@ -5,7 +5,7 @@ const BLADE_AREA = 0.12; // m^2 (Smoothie/Macon style)
 const BOAT_MASS = 14; // kg (Single scull)
 const ROWER_MASS = 85; // kg
 const ADDED_MASS = 10; // kg (Entrained water virtual mass)
-const I_OAR = 1.5; // kg m^2 (Oar moment of inertia)
+const I_OAR = 25; // kg m^2 (Effective oar moment of inertia, including water added mass)
 const L_SLIDE = 0.7; // m (Seat slide length)
 
 export function simulateStroke(
@@ -33,7 +33,7 @@ export function simulateStroke(
     // 1. DRIVE PHASE (Dynamic Integration)
     const driveResults: SimulationResult[] = [];
     // We integrate until the oar angle reaches the finish angle, preserving geometric constraints
-    while (theta > finishRad && t_cycle < T) {
+    while (theta > finishRad && t_cycle < 5.0) {
       const progress = (catchRad - theta) / totalAngle;
       
       let phaseMul = 1;
@@ -99,7 +99,7 @@ export function simulateStroke(
     }
 
     const driveTime = t_cycle;
-    const recoveryTime = Math.max(0.1, T - driveTime);
+    const recoveryTime = Math.max(0.4, T - driveTime);
     
     // To strictly conserve momentum across the stroke cycle, the integral of seat acceleration (ar)
     // over the recovery must precisely cancel the accumulated seat velocity from the drive phase,
