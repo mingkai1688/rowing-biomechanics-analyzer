@@ -67,7 +67,8 @@ export function simulateStroke(
       const ar = L_SLIDE * (domega / totalAngle);
       
       // Advanced Hull Drag: Skin friction (v^1.85) + Wave making (v^4)
-      const hullDrag = 2.5 * Math.pow(Math.max(0, vb), 1.85) + 0.05 * Math.pow(Math.max(0, vb), 4);
+      const vb_abs = Math.abs(vb);
+      const hullDrag = (2.5 * Math.pow(vb_abs, 1.85) + 0.05 * Math.pow(vb_abs, 4)) * Math.sign(vb);
       
       // Coupled Two-Body System Acceleration
       const netForce = 2 * F_wx - hullDrag - ROWER_MASS * ar;
@@ -100,15 +101,24 @@ export function simulateStroke(
     const driveTime = t_cycle;
     const recoveryTime = Math.max(0.1, T - driveTime);
     
+    // To strictly conserve momentum across the stroke cycle, the integral of seat acceleration (ar)
+    // over the recovery must precisely cancel the accumulated seat velocity from the drive phase,
+    // while also returning the seat to the catch position (integral of v_r over recovery = -L_SLIDE).
+    const v_r_finish = L_SLIDE * omega / totalAngle;
+    const A = v_r_finish;
+    const B = (-6 * L_SLIDE - 4 * v_r_finish * recoveryTime) / (recoveryTime * recoveryTime);
+    const C = (3 * v_r_finish + 6 * L_SLIDE / recoveryTime) / (recoveryTime * recoveryTime);
+    
     // 2. RECOVERY PHASE (Kinematic Return)
     const recResults: SimulationResult[] = [];
     for (let t_rec = 0; t_rec < recoveryTime; t_rec += dt) {
       const phi = Math.PI * (t_rec / recoveryTime);
       
-      // Kinematic seat acceleration (creates the characteristic velocity ripple)
-      const ar = -(L_SLIDE / 2) * Math.pow(Math.PI / recoveryTime, 2) * Math.cos(phi);
+      // Momentum-conserving seat acceleration (derivative of parabolic velocity profile)
+      const ar = B + 2 * C * t_rec;
       
-      const hullDrag = 2.5 * Math.pow(Math.max(0, vb), 1.85) + 0.05 * Math.pow(Math.max(0, vb), 4);
+      const vb_abs = Math.abs(vb);
+      const hullDrag = (2.5 * Math.pow(vb_abs, 1.85) + 0.05 * Math.pow(vb_abs, 4)) * Math.sign(vb);
       
       // Positive surge early recovery, negative 'check' late recovery
       const netForce = -hullDrag - ROWER_MASS * ar; 
