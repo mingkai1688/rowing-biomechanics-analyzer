@@ -87,6 +87,8 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis 
                 dataKey="time" 
+                type="number"
+                domain={[0, 'dataMax']}
                 tick={{ fontSize: 10, fill: '#94a3b8' }} 
                 axisLine={false} 
                 tickLine={false} 
@@ -114,6 +116,8 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis 
                 dataKey="time" 
+                type="number"
+                domain={[0, 'dataMax']}
                 tick={{ fontSize: 10, fill: '#94a3b8' }} 
                 axisLine={false} 
                 tickLine={false} 
@@ -244,6 +248,8 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis 
                 dataKey="time" 
+                type="number"
+                domain={[0, 'dataMax']}
                 tick={{ fontSize: 10, fill: '#94a3b8' }} 
                 axisLine={false} 
                 tickLine={false} 
