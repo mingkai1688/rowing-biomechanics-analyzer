@@ -98,6 +98,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 labelFormatter={(v) => `Time: ${v}s`}
               />
               <Area type="monotone" dataKey="propulsiveForce" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorForce)" />
+              <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -124,6 +125,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 labelFormatter={(v) => `Time: ${v}s`}
               />
               <Line type="monotone" dataKey="boatVelocity" stroke="#3b82f6" strokeWidth={3} dot={false} />
+              <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -253,6 +255,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 labelFormatter={(v) => `Time: ${v}s`}
               />
               <Area type="monotone" dataKey="hullDrag" stroke="#64748b" strokeWidth={3} fillOpacity={1} fill="url(#colorDrag)" />
+              <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
