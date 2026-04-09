@@ -73,6 +73,8 @@ export function simulateStroke(
       // Coupled Two-Body System Acceleration
       const netForce = 2 * F_wx - hullDrag - ROWER_MASS * ar;
       const dvb = netForce / (BOAT_MASS + ROWER_MASS + ADDED_MASS);
+      
+      const seatPosition = L_SLIDE * (catchRad - theta) / totalAngle;
 
       if (Math.round(t_cycle * 1000) % 10 === 0) {
         driveResults.push({
@@ -87,6 +89,7 @@ export function simulateStroke(
           netForce: netForce,
           slip: U_norm,
           boatVelocity: vb,
+          seatPosition,
           phase
         });
       }
@@ -126,6 +129,8 @@ export function simulateStroke(
       
       const currentTheta = finishRad + totalAngle * 0.5 * (1 - Math.cos(phi));
       const currentOmega = -(totalAngle / 2) * (Math.PI / recoveryTime) * Math.sin(phi);
+      
+      const seatPosition = L_SLIDE + A * t_rec + 0.5 * B * t_rec * t_rec + (C / 3) * t_rec * t_rec * t_rec;
 
       if (Math.round(t_rec * 1000) % 10 === 0) {
         recResults.push({
@@ -140,6 +145,7 @@ export function simulateStroke(
           netForce: netForce,
           slip: -vb * Math.cos(currentTheta), // Rough slip estimate out of water
           boatVelocity: vb,
+          seatPosition,
           phase: 'Recovery'
         });
       }

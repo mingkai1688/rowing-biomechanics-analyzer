@@ -30,6 +30,7 @@ export interface SimulationResult {
   netForce: number;
   slip: number;
   boatVelocity: number;
+  seatPosition: number;
   phase: 'Catch' | 'Mid-Drive' | 'Finish' | 'Recovery';
 }
 

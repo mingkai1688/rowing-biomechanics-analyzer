@@ -189,8 +189,17 @@ export function Visualizer({
             setup={setup}
           />
           
-          {/* Rower (Simplified) */}
-          <circle cx="200" cy="100" r="10" fill="#64748b" />
+          {/* Slide Rails */}
+          <line x1="196" y1="80" x2="196" y2="125" stroke="#475569" strokeWidth="1.5" strokeOpacity="0.4" />
+          <line x1="204" y1="80" x2="204" y2="125" stroke="#475569" strokeWidth="1.5" strokeOpacity="0.4" />
+          
+          {/* Animated Rower & Seat */}
+          <g transform={`translate(0, ${85 + (currentData.seatPosition || 0) * 50})`}>
+            {/* Seat */}
+            <rect x="193" y="-5" width="14" height="10" rx="2" fill="#0f172a" />
+            {/* Rower */}
+            <circle cx="200" cy="0" r="8" fill="#94a3b8" stroke="#64748b" strokeWidth="2" />
+          </g>
         </svg>
       </div>
 
