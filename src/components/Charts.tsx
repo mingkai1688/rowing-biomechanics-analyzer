@@ -69,7 +69,7 @@ export function SensitivityChart({ sensitivities, results }: { sensitivities: Se
 export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, currentTime }: { results: SimulationResult[], zeroSlipPoints: SimulationResult[], zeroSlipPoint: SimulationResult | undefined, currentTime: number }) {
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Force Profile */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm h-[350px]">
           <h3 className="font-bold mb-4 flex items-center gap-2">
@@ -85,17 +85,17 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis 
-                dataKey="time" 
+              <XAxis
+                dataKey="time"
                 type="number"
                 domain={[0, 'dataMax']}
-                tick={{ fontSize: 10, fill: '#94a3b8' }} 
-                axisLine={false} 
-                tickLine={false} 
+                tick={{ fontSize: 10, fill: '#94a3b8' }}
+                axisLine={false}
+                tickLine={false}
                 tickFormatter={(v) => `${v.toFixed(1)}s`}
               />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
                 labelFormatter={(v) => `Time: ${v}s`}
               />
@@ -105,37 +105,43 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
           </ResponsiveContainer>
         </div>
 
-        {/* Velocity Profile */}
+        {/* Hull Drag Profile */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm h-[350px]">
           <h3 className="font-bold mb-4 flex items-center gap-2">
-            <Maximize2 className="w-4 h-4 text-blue-500" />
-            System Velocity (m/s)
+            <Wind className="w-4 h-4 text-slate-500" />
+            Hull Drag Profile (N)
           </h3>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={results}>
+            <AreaChart data={results}>
+              <defs>
+                <linearGradient id="colorDrag" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#64748b" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis 
-                dataKey="time" 
+              <XAxis
+                dataKey="time"
                 type="number"
                 domain={[0, 'dataMax']}
-                tick={{ fontSize: 10, fill: '#94a3b8' }} 
-                axisLine={false} 
-                tickLine={false} 
+                tick={{ fontSize: 10, fill: '#94a3b8' }}
+                axisLine={false}
+                tickLine={false}
                 tickFormatter={(v) => `${v.toFixed(1)}s`}
               />
-              <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <Tooltip 
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <Tooltip
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
                 labelFormatter={(v) => `Time: ${v}s`}
               />
-              <Line type="monotone" dataKey="boatVelocity" stroke="#3b82f6" strokeWidth={3} dot={false} />
+              <Area type="monotone" dataKey="hullDrag" stroke="#64748b" strokeWidth={3} fillOpacity={1} fill="url(#colorDrag)" />
               <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
 
         {/* Net Force & Slip Profile */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col h-[350px]">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-indigo-600" />
@@ -231,38 +237,32 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
           </div>
         </div>
 
-        {/* Hull Drag Profile */}
+        {/* System Velocity */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm h-[350px]">
           <h3 className="font-bold mb-4 flex items-center gap-2">
-            <Wind className="w-4 h-4 text-slate-500" />
-            Hull Drag Profile (N)
+            <Maximize2 className="w-4 h-4 text-blue-500" />
+            System Velocity (m/s)
           </h3>
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={results}>
-              <defs>
-                <linearGradient id="colorDrag" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#64748b" stopOpacity={0.1}/>
-                  <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
+            <LineChart data={results}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis 
-                dataKey="time" 
+              <XAxis
+                dataKey="time"
                 type="number"
                 domain={[0, 'dataMax']}
-                tick={{ fontSize: 10, fill: '#94a3b8' }} 
-                axisLine={false} 
-                tickLine={false} 
+                tick={{ fontSize: 10, fill: '#94a3b8' }}
+                axisLine={false}
+                tickLine={false}
                 tickFormatter={(v) => `${v.toFixed(1)}s`}
               />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <Tooltip 
+              <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <Tooltip
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
                 labelFormatter={(v) => `Time: ${v}s`}
               />
-              <Area type="monotone" dataKey="hullDrag" stroke="#64748b" strokeWidth={3} fillOpacity={1} fill="url(#colorDrag)" />
+              <Line type="monotone" dataKey="boatVelocity" stroke="#3b82f6" strokeWidth={3} dot={false} />
               <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
-            </AreaChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
