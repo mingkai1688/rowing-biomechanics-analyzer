@@ -10,7 +10,7 @@ export function PhysicsExplanation() {
         </div>
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Physics & Equations Behind the Model</h2>
-          <p className="text-sm text-slate-500 mt-1">A numerical integration approach to rowing biomechanics</p>
+          <p className="text-sm text-slate-500 mt-1">A numerical integration approach to two-body rowing biomechanics</p>
         </div>
       </div>
 
@@ -22,18 +22,18 @@ export function PhysicsExplanation() {
             <h3 className="font-semibold text-lg">Hydrodynamic Oar Forces</h3>
           </div>
           <p className="text-sm text-slate-600 leading-relaxed">
-            The blade generates propulsion through a combination of <strong>Lift</strong> (moving water laterally) and <strong>Drag</strong> (pushing water backward), similar to an airplane wing.
+            The blade generates propulsion by accelerating water. The model determines the true flow vector against the blade, calculating an Angle of Attack (α) to determine Normal and Tangential forces.
           </p>
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 font-mono text-sm space-y-3 overflow-x-auto">
-            <p><span className="text-slate-400">Lift Force:</span> F<sub>L</sub> = ½ ρ A v<sub>rel</sub>² C<sub>L</sub> sin(θ)</p>
-            <p><span className="text-slate-400">Drag Force:</span> F<sub>D</sub> = ½ ρ A v<sub>rel</sub>² C<sub>D</sub> cos(θ)</p>
+            <p><span className="text-slate-400">Normal Force:</span> F<sub>N</sub> = ½ ρ A V² C<sub>N</sub>(α)</p>
+            <p><span className="text-slate-400">Tangential:</span> F<sub>T</sub> = ½ ρ A V² C<sub>T</sub>(α)</p>
+            <p><span className="text-slate-400">Propulsion:</span> F<sub>wx</sub> = F<sub>N</sub> cos(θ) - F<sub>T</sub> sin(θ)</p>
           </div>
           <ul className="text-xs text-slate-500 space-y-1 list-disc pl-4">
             <li><strong>ρ</strong>: Water density (1000 kg/m³)</li>
-            <li><strong>A</strong>: Blade surface area (0.12 m²)</li>
-            <li><strong>v<sub>rel</sub></strong>: Slip velocity (blade speed relative to water)</li>
-            <li><strong>C<sub>L</sub>, C<sub>D</sub></strong>: Lift and Drag coefficients</li>
-            <li><strong>θ</strong>: Oar angle relative to the boat</li>
+            <li><strong>V</strong>: Total flow velocity against the blade</li>
+            <li><strong>α</strong>: Hydrodynamic angle of attack</li>
+            <li><strong>C<sub>N</sub>, C<sub>T</sub></strong>: Force coefficients (Caplan & Gardner approximations)</li>
           </ul>
         </div>
 
@@ -41,20 +41,20 @@ export function PhysicsExplanation() {
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-emerald-600 mb-2">
             <Zap className="w-5 h-5" />
-            <h3 className="font-semibold text-lg">System Dynamics</h3>
+            <h3 className="font-semibold text-lg">Two-Body System Dynamics</h3>
           </div>
           <p className="text-sm text-slate-600 leading-relaxed">
-            Newton's Second Law is applied to calculate the boat's acceleration. We subtract the hull's resistance from the total propulsive force of both oars.
+            The simulation treats the boat and the rower as two distinct masses connected by the footstretcher. As the rower slides back and forth during the drive and recovery, internal momentum is transferred.
           </p>
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 font-mono text-sm space-y-3 overflow-x-auto">
-            <p><span className="text-slate-400">Hull Drag:</span> F<sub>hull</sub> = k · v<sub>boat</sub>²</p>
-            <p><span className="text-slate-400">Net Force:</span> F<sub>net</sub> = 2(F<sub>L</sub> + F<sub>D</sub>) - F<sub>hull</sub></p>
-            <p><span className="text-slate-400">Acceleration:</span> a = F<sub>net</sub> / (m<sub>boat</sub> + m<sub>rower</sub>)</p>
+            <p><span className="text-slate-400">Hull Resistance:</span> D = k<sub>f</sub> v<sup>1.85</sup> + k<sub>w</sub> v<sup>4</sup></p>
+            <p><span className="text-slate-400">Net Force:</span> F<sub>net</sub> = 2(F<sub>wx</sub>) - D - m<sub>rower</sub>(a<sub>slide</sub>)</p>
+            <p><span className="text-slate-400">Acceleration:</span> a = F<sub>net</sub> / (m<sub>boat</sub> + m<sub>rower</sub> + m<sub>virtual</sub>)</p>
           </div>
           <ul className="text-xs text-slate-500 space-y-1 list-disc pl-4">
-            <li><strong>k</strong>: Hull drag coefficient (3.5 for a single scull)</li>
-            <li><strong>m<sub>boat</sub></strong>: Mass of the boat (14 kg)</li>
-            <li><strong>m<sub>rower</sub></strong>: Mass of the rower (85 kg)</li>
+            <li><strong>D</strong>: Drag comprised of skin friction & wave resistance</li>
+            <li><strong>a<sub>slide</sub></strong>: Rower acceleration relative to the hull</li>
+            <li><strong>m<sub>virtual</sub></strong>: Entrained water added mass (~10kg)</li>
           </ul>
         </div>
 
@@ -62,16 +62,16 @@ export function PhysicsExplanation() {
         <div className="col-span-1 md:col-span-2 space-y-4 mt-4 pt-6 border-t border-slate-100">
           <div className="flex items-center gap-2 text-indigo-600 mb-2">
             <Anchor className="w-5 h-5" />
-            <h3 className="font-semibold text-lg">Understanding Blade Slip</h3>
+            <h3 className="font-semibold text-lg">Torque Integration & Slip</h3>
           </div>
           <p className="text-sm text-slate-600 leading-relaxed">
-            The most critical aspect of an efficient catch is managing <strong>Slip</strong>. It is the relative speed of the blade through the water.
+            Rather than rigidly prescribing handle speed, the model takes a <strong>Force input</strong>. The angular acceleration of the oar is integrated dynamically over time. If handle force is insufficient to overcome the boat's speed, the blade velocity through the water (Slip) becomes negative, generating backward "braking" force (backwatering).
           </p>
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 font-mono text-sm overflow-x-auto">
-            <p><span className="text-slate-400">Slip (v<sub>rel</sub>):</span> v<sub>blade</sub> - v<sub>boat</sub> · cos(θ)</p>
+            <p><span className="text-slate-400">Angular Acceleration:</span> α<sub>oar</sub> = (F<sub>handle</sub> L<sub>in</sub> - F<sub>N</sub> L<sub>out</sub>) / I<sub>oar</sub></p>
           </div>
-          <p className="text-sm text-slate-600 leading-relaxed">
-            If the blade enters the water while moving slower than the boat's forward progression, the slip becomes <strong>negative</strong>. When this happens, the hydrodynamic formulas yield a negative propulsive force (acting as a brake), which creates the "heavy catch" feeling known as <strong>backwatering</strong>.
+          <p className="text-sm text-slate-600 leading-relaxed mt-2">
+            The "heavy catch" effect is accurately modeled by evaluating the angular speed against the forward velocity of the shell.
           </p>
         </div>
       </div>

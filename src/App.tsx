@@ -31,11 +31,12 @@ export default function App() {
     finishAngle: -40,
     strokeRate: 32,
     maxHandleForce: 600,
-    cycles: 2
+    cycles: 2,
+    peakForcePercent: 0.5,
   });
 
   const results = useMemo(() => simulateStroke(anatomy, setup, params), [anatomy, setup, params]);
-  const sensitivities = useMemo(() => calculateSensitivity(results), [results]);
+  const sensitivities = useMemo(() => calculateSensitivity(results, anatomy, setup, params), [results, anatomy, setup, params]);
 
   const zeroSlipPoints = useMemo(() => {
     // Find all points where slip becomes positive during drive phases
@@ -160,6 +161,13 @@ export default function App() {
               <ControlSlider label="Finish Angle (°)" value={params.finishAngle} min={-50} max={-20} step={1} onChange={v => setParams(prev => ({...prev, finishAngle: v}))} />
               <ControlSlider label="Rate (spm)" value={params.strokeRate} min={18} max={45} step={1} onChange={v => setParams(prev => ({...prev, strokeRate: v}))} />
               <ControlSlider label="Handle Force (N)" value={params.maxHandleForce} min={200} max={1200} step={10} onChange={v => setParams(prev => ({...prev, maxHandleForce: v}))} />
+              <div>
+                <ControlSlider label="Drive Peak Timing (%)" value={Math.round(params.peakForcePercent * 100)} min={10} max={90} step={5} onChange={v => setParams(prev => ({...prev, peakForcePercent: v / 100}))} />
+                <div className="flex justify-between text-xs text-slate-400 mt-1">
+                  <span>Early Drive</span>
+                  <span>Late Drive</span>
+                </div>
+              </div>
               <ControlSlider label="Cycles" value={params.cycles} min={2} max={5} step={1} onChange={v => setParams(prev => ({...prev, cycles: v}))} />
             </div>
           </section>
