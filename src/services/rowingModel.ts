@@ -42,8 +42,18 @@ export function simulateStroke(
       else if (progress < 0.66) { phase = 'Mid-Drive'; phaseMul = forceMultiplier.mid; }
       else { phase = 'Finish'; phaseMul = forceMultiplier.finish; }
 
-      // Force-driven handle input: modified sine to avoid 0 initial force
-      const F_handle = params.maxHandleForce * phaseMul * Math.sin(Math.PI * (progress * 0.9 + 0.05));
+      // Piecewise sine envelope peaking at peakForcePercent through the drive.
+      // Progress is rescaled to [0.05, 0.95] so the envelope is ~15% at both
+      // endpoints (matching original behaviour) and never zero, which prevents
+      // the oar stalling at the catch. At p=0.5 this is identical to the
+      // original sin(π*(progress*0.9+0.05)) formula.
+      const p = params.peakForcePercent;
+      const u = progress * 0.9 + 0.05;          // [0.05 … 0.95]
+      const peak = p * 0.9 + 0.05;              // peak in rescaled space
+      const envelope = u <= peak
+        ? Math.sin(Math.PI * u / (2 * peak))
+        : Math.sin(Math.PI * (1 - u) / (2 * (1 - peak)));
+      const F_handle = params.maxHandleForce * phaseMul * envelope;
       
       // Blade Kinematics
       const U_norm = -vb * Math.cos(theta) + setup.outboard * omega;
