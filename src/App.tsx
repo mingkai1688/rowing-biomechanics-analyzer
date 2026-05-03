@@ -162,7 +162,7 @@ export default function App() {
               <ControlSlider label="Rate (spm)" value={params.strokeRate} min={18} max={45} step={1} onChange={v => setParams(prev => ({...prev, strokeRate: v}))} />
               <ControlSlider label="Handle Force (N)" value={params.maxHandleForce} min={200} max={1200} step={10} onChange={v => setParams(prev => ({...prev, maxHandleForce: v}))} />
               <div>
-                <ControlSlider label="Drive Peak Timing (%)" value={Math.round(params.peakForcePercent * 100)} min={20} max={80} step={5} onChange={v => setParams(prev => ({...prev, peakForcePercent: v / 100}))} />
+                <ControlSlider label="Drive Peak Timing (%)" value={Math.round(params.peakForcePercent * 100)} min={10} max={90} step={5} onChange={v => setParams(prev => ({...prev, peakForcePercent: v / 100}))} />
                 <div className="flex justify-between text-xs text-slate-400 mt-1">
                   <span>Early Drive</span>
                   <span>Late Drive</span>
