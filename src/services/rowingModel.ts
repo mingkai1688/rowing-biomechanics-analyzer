@@ -6,7 +6,24 @@ const BOAT_MASS = 14; // kg (Single scull)
 const ROWER_MASS = 85; // kg
 const ADDED_MASS = 10; // kg (Entrained water virtual mass)
 const I_OAR = 25; // kg m^2 (Effective oar moment of inertia, including water added mass)
-const L_SLIDE = 0.7; // m (Seat slide length)
+const BASE_SLIDE_LENGTH = 0.7; // m (Seat slide length for baseline anatomy)
+const MIN_PEAK_FORCE_PERCENT = 0.2;
+const MAX_PEAK_FORCE_PERCENT = 0.8;
+export const MAX_SEAT_ACCEL = 15; // m/s^2, bounds the physiologically plausible seat return
+
+function clampPeakForcePercent(value: number) {
+  if (!Number.isFinite(value)) return 0.5;
+  return Math.min(MAX_PEAK_FORCE_PERCENT, Math.max(MIN_PEAK_FORCE_PERCENT, value));
+}
+
+export function estimateSlideLength(anatomy: RowerAnatomy): number {
+  const legContribution = (anatomy.legLength - 0.95) * 0.45;
+  const trunkContribution = (anatomy.trunkLength - 0.65) * 0.18;
+  const armContribution = (anatomy.armLength - 0.75) * 0.12;
+  const slideLength = BASE_SLIDE_LENGTH + legContribution + trunkContribution + armContribution;
+
+  return Math.min(0.85, Math.max(0.55, slideLength));
+}
 
 export function simulateStroke(
   anatomy: RowerAnatomy,
@@ -17,10 +34,14 @@ export function simulateStroke(
   const results: SimulationResult[] = [];
   const T = 60 / params.strokeRate;
   const dt = 0.002;
-  
+  // Down-sample integrator output to a ~10ms cadence for charts/animation.
+  // At dt=0.002s, every 5 steps = 10ms; this matches the cadence the UI was tuned for.
+  const SAMPLE_EVERY_N_STEPS = 5;
+
   const catchRad = (params.catchAngle * Math.PI) / 180;
   const finishRad = (params.finishAngle * Math.PI) / 180;
   const totalAngle = catchRad - finishRad;
+  const slideLength = estimateSlideLength(anatomy);
 
   let vb = 0; // Start from rest
   let t_global = 0;
@@ -29,11 +50,16 @@ export function simulateStroke(
     let theta = catchRad;
     let omega = 0;
     let t_cycle = 0;
-    
+    let driveStep = 0;
+
     // 1. DRIVE PHASE (Dynamic Integration)
     const driveResults: SimulationResult[] = [];
-    // We integrate until the oar angle reaches the finish angle, preserving geometric constraints
+    // We integrate until the oar angle reaches the finish angle, preserving geometric constraints.
+    // The omega < 0 stall guard prevents underpowered runs from looping until the 5s safety cap:
+    // if the rower can't overcome blade reaction, omega flips negative and theta would drift back
+    // toward the catch, producing nonsense samples.
     while (theta > finishRad && t_cycle < 5.0) {
+      if (omega < 0 && t_cycle > 0.05) break;
       const progress = (catchRad - theta) / totalAngle;
       
       let phaseMul = 1;
@@ -47,7 +73,7 @@ export function simulateStroke(
       // endpoints (matching original behaviour) and never zero, which prevents
       // the oar stalling at the catch. At p=0.5 this is identical to the
       // original sin(π*(progress*0.9+0.05)) formula.
-      const p = params.peakForcePercent;
+      const p = clampPeakForcePercent(params.peakForcePercent);
       const u = progress * 0.9 + 0.05;          // [0.05 … 0.95]
       const peak = p * 0.9 + 0.05;              // peak in rescaled space
       const envelope = u <= peak
@@ -74,7 +100,7 @@ export function simulateStroke(
       const domega = (F_handle * setup.inboard - F_norm * setup.outboard) / I_OAR;
       
       // Rower internal inertial force (a_r is acceleration of rower relative to boat)
-      const ar = L_SLIDE * (domega / totalAngle);
+      const ar = slideLength * (domega / totalAngle);
       
       // Advanced Hull Drag: Skin friction (v^1.85) + Wave making (v^4)
       const vb_abs = Math.abs(vb);
@@ -84,9 +110,9 @@ export function simulateStroke(
       const netForce = 2 * F_wx - hullDrag - ROWER_MASS * ar;
       const dvb = netForce / (BOAT_MASS + ROWER_MASS + ADDED_MASS);
       
-      const seatPosition = L_SLIDE * (catchRad - theta) / totalAngle;
+      const seatPosition = slideLength * (catchRad - theta) / totalAngle;
 
-      if (Math.round(t_cycle * 1000) % 10 === 0) {
+      if (driveStep % SAMPLE_EVERY_N_STEPS === 0) {
         driveResults.push({
           time: t_global,
           oarAngle: (theta * 180) / Math.PI,
@@ -109,21 +135,38 @@ export function simulateStroke(
       vb += dvb * dt;
       t_cycle += dt;
       t_global += dt;
+      driveStep += 1;
     }
 
     const driveTime = t_cycle;
-    const recoveryTime = Math.max(0.4, T - driveTime);
-    
+    // For the cubic seat-velocity profile, peak acceleration is approximately
+    // 6*L/Tr^2, so Tr >= sqrt(6*L/a_max). A fixed 0.1s floor let the same slide
+    // distance demand extreme, non-physiological acceleration and inertial force.
+    const minRecoveryTime = Math.sqrt(6 * slideLength / MAX_SEAT_ACCEL);
+    const recoveryTime = Math.max(minRecoveryTime, T - driveTime);
+
+    // The drive does not always reach finishRad: it also exits on the 5s safety cap or
+    // the omega < 0 stall guard when the rower cannot overcome blade reaction. Recovery
+    // must therefore start from wherever the oar and seat actually ended up, otherwise
+    // an underpowered stroke teleports the oar to the finish and the seat to full slide
+    // in a single step, and fabricates recovery accelerations for travel that never
+    // happened. On a completed drive theta === finishRad and these reduce to the
+    // previous fixed values.
+    const driveEndTheta = theta;
+    const driveEndSeat = slideLength * (catchRad - driveEndTheta) / totalAngle;
+    const recoverySweep = catchRad - driveEndTheta;
+
     // To strictly conserve momentum across the stroke cycle, the integral of seat acceleration (ar)
     // over the recovery must precisely cancel the accumulated seat velocity from the drive phase,
-    // while also returning the seat to the catch position (integral of v_r over recovery = -L_SLIDE).
-    const v_r_finish = L_SLIDE * omega / totalAngle;
+    // while also returning the seat to the catch position (integral of v_r over recovery = -driveEndSeat).
+    const v_r_finish = slideLength * omega / totalAngle;
     const A = v_r_finish;
-    const B = (-6 * L_SLIDE - 4 * v_r_finish * recoveryTime) / (recoveryTime * recoveryTime);
-    const C = (3 * v_r_finish + 6 * L_SLIDE / recoveryTime) / (recoveryTime * recoveryTime);
-    
+    const B = (-6 * driveEndSeat - 4 * v_r_finish * recoveryTime) / (recoveryTime * recoveryTime);
+    const C = (3 * v_r_finish + 6 * driveEndSeat / recoveryTime) / (recoveryTime * recoveryTime);
+
     // 2. RECOVERY PHASE (Kinematic Return)
     const recResults: SimulationResult[] = [];
+    let recoveryStep = 0;
     for (let t_rec = 0; t_rec < recoveryTime; t_rec += dt) {
       const phi = Math.PI * (t_rec / recoveryTime);
       
@@ -137,12 +180,12 @@ export function simulateStroke(
       const netForce = -hullDrag - ROWER_MASS * ar; 
       const dvb = netForce / (BOAT_MASS + ROWER_MASS + ADDED_MASS);
       
-      const currentTheta = finishRad + totalAngle * 0.5 * (1 - Math.cos(phi));
-      const currentOmega = -(totalAngle / 2) * (Math.PI / recoveryTime) * Math.sin(phi);
-      
-      const seatPosition = L_SLIDE + A * t_rec + 0.5 * B * t_rec * t_rec + (C / 3) * t_rec * t_rec * t_rec;
+      const currentTheta = driveEndTheta + recoverySweep * 0.5 * (1 - Math.cos(phi));
+      const currentOmega = -(recoverySweep / 2) * (Math.PI / recoveryTime) * Math.sin(phi);
 
-      if (Math.round(t_rec * 1000) % 10 === 0) {
+      const seatPosition = driveEndSeat + A * t_rec + 0.5 * B * t_rec * t_rec + (C / 3) * t_rec * t_rec * t_rec;
+
+      if (recoveryStep % SAMPLE_EVERY_N_STEPS === 0) {
         recResults.push({
           time: t_global,
           oarAngle: (currentTheta * 180) / Math.PI,
@@ -162,6 +205,7 @@ export function simulateStroke(
 
       vb += dvb * dt;
       t_global += dt;
+      recoveryStep += 1;
     }
 
     results.push(...driveResults, ...recResults);
@@ -170,29 +214,50 @@ export function simulateStroke(
   return results;
 }
 
+export function getLastCycleResults(results: SimulationResult[]): SimulationResult[] {
+  let lastCycleStartIndex = 0;
+
+  for (let i = 1; i < results.length; i += 1) {
+    if (results[i - 1].phase === 'Recovery' && results[i].phase !== 'Recovery') {
+      lastCycleStartIndex = i;
+    }
+  }
+
+  return results.slice(lastCycleStartIndex);
+}
+
+export function getAverageBoatSpeed(results: SimulationResult[]): number {
+  const lastCycle = getLastCycleResults(results);
+  if (lastCycle.length === 0) return 0;
+  return lastCycle.reduce((sum, result) => sum + result.boatVelocity, 0) / lastCycle.length;
+}
+
+export function getAchievedStrokeRate(results: SimulationResult[]): number {
+  const cycleStarts = results
+    .filter((result, index) => index === 0 || (results[index - 1].phase === 'Recovery' && result.phase !== 'Recovery'))
+    .map((result) => result.time);
+
+  if (cycleStarts.length < 2) return 0;
+  const meanCycleDuration = (cycleStarts.at(-1)! - cycleStarts[0]) / (cycleStarts.length - 1);
+  return meanCycleDuration > 0 ? 60 / meanCycleDuration : 0;
+}
+
 export function calculateSensitivity(
   results: SimulationResult[], 
   anatomy: RowerAnatomy, 
   setup: BoatSetup, 
   params: StrokeParams
 ): SensitivityResult[] {
-  // Extract steady-state (last cycle) average velocity
-  const getSpeed = (res: SimulationResult[]) => {
-    const lastCycle = res.filter(r => r.time >= Math.max(0, (params.cycles - 1)) * (60 / params.strokeRate));
-    if (lastCycle.length === 0) return 0;
-    return lastCycle.reduce((sum, r) => sum + r.boatVelocity, 0) / lastCycle.length;
-  };
-  
-  const baseSpeed = getSpeed(results);
+  const baseSpeed = getAverageBoatSpeed(results);
 
   // Perturbation runs (+5% force in specific phases)
   const resCatch = simulateStroke(anatomy, setup, params, { catch: 1.05, mid: 1.0, finish: 1.0 });
   const resMid = simulateStroke(anatomy, setup, params, { catch: 1.0, mid: 1.05, finish: 1.0 });
   const resFinish = simulateStroke(anatomy, setup, params, { catch: 1.0, mid: 1.0, finish: 1.05 });
 
-  const sCatch = Math.max(0, getSpeed(resCatch) - baseSpeed);
-  const sMid = Math.max(0, getSpeed(resMid) - baseSpeed);
-  const sFinish = Math.max(0, getSpeed(resFinish) - baseSpeed);
+  const sCatch = Math.max(0, getAverageBoatSpeed(resCatch) - baseSpeed);
+  const sMid = Math.max(0, getAverageBoatSpeed(resMid) - baseSpeed);
+  const sFinish = Math.max(0, getAverageBoatSpeed(resFinish) - baseSpeed);
   
   const totalS = sCatch + sMid + sFinish + 0.0001; // Avoid div zero
 
@@ -214,8 +279,8 @@ export function calculateSensitivity(
     },
     {
       phase: 'Recovery',
-      sensitivity: 0.05, // Fixed reference
-      description: 'Recovery affects momentum via inertial surge and check, modeled as a fixed baseline sensitivity.'
+      sensitivity: 0.05, // Fixed reference baseline — not a measured perturbation
+      description: 'Reference baseline only. Unlike the drive phases, this is a fixed display value, not a measured +5% perturbation. Recovery affects boat speed via inertial surge and check, but those effects are not isolated in this chart.'
     }
   ];
 }

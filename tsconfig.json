@@ -11,15 +11,11 @@
     ],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "strict": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
+    "allowJs": false,
     "jsx": "react-jsx",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
     "allowImportingTsExtensions": true,
     "noEmit": true
   }

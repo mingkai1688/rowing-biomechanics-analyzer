@@ -1,12 +1,12 @@
 import React from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, Cell, AreaChart, Area, ReferenceLine, ReferenceDot 
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell, AreaChart, Area, ComposedChart, ReferenceLine, ReferenceDot
 } from 'recharts';
 import { Wind, Info, Activity, Maximize2, Target } from 'lucide-react';
 import { SimulationResult, SensitivityResult } from '../types';
 
-export function SensitivityChart({ sensitivities, results }: { sensitivities: SensitivityResult[], results: SimulationResult[] }) {
+export function SensitivityChart({ sensitivities }: { sensitivities: SensitivityResult[] }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col">
       <div className="flex items-center justify-between mb-6">
@@ -14,14 +14,11 @@ export function SensitivityChart({ sensitivities, results }: { sensitivities: Se
           <Wind className="w-5 h-5 text-blue-600" />
           <h2 className="font-bold text-lg">Phase Sensitivity Analysis</h2>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold">
-          Catch Efficiency: {((results.find(r => r.phase === 'Catch')?.netForce || 0) / 10).toFixed(1)}%
-        </div>
         <Info className="w-4 h-4 text-slate-400 cursor-help" />
       </div>
       
       <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <BarChart data={sensitivities} layout="vertical" margin={{ left: 20, right: 40 }}>
             <XAxis type="number" hide />
             <YAxis 
@@ -47,7 +44,8 @@ export function SensitivityChart({ sensitivities, results }: { sensitivities: Se
                 return null;
               }}
             />
-            <Bar dataKey="sensitivity" radius={[0, 4, 4, 0]} barSize={32}>
+            {/* The rAF playback loop re-renders continuously, so disable Recharts' entry reveal animation. */}
+            <Bar dataKey="sensitivity" radius={[0, 4, 4, 0]} barSize={32} isAnimationActive={false}>
               {sensitivities.map((entry, index) => (
                 <Cell 
                   key={`cell-${index}`} 
@@ -66,7 +64,7 @@ export function SensitivityChart({ sensitivities, results }: { sensitivities: Se
   );
 }
 
-export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, currentTime }: { results: SimulationResult[], zeroSlipPoints: SimulationResult[], zeroSlipPoint: SimulationResult | undefined, currentTime: number }) {
+export function DetailedCharts({ results, zeroSlipPoints, currentTime }: { results: SimulationResult[], zeroSlipPoints: SimulationResult[], currentTime: number }) {
   return (
     <>
       <div className="grid grid-cols-1 gap-6">
@@ -76,7 +74,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
             <Activity className="w-4 h-4 text-emerald-500" />
             Propulsive Force Profile (N)
           </h3>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <AreaChart data={results}>
               <defs>
                 <linearGradient id="colorForce" x1="0" y1="0" x2="0" y2="1">
@@ -99,7 +97,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
                 labelFormatter={(v) => `Time: ${v}s`}
               />
-              <Area type="monotone" dataKey="propulsiveForce" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorForce)" />
+              <Area type="monotone" dataKey="propulsiveForce" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorForce)" isAnimationActive={false} />
               <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
             </AreaChart>
           </ResponsiveContainer>
@@ -111,7 +109,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
             <Wind className="w-4 h-4 text-slate-500" />
             Hull Drag Profile (N)
           </h3>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <AreaChart data={results}>
               <defs>
                 <linearGradient id="colorDrag" x1="0" y1="0" x2="0" y2="1">
@@ -134,7 +132,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
                 labelFormatter={(v) => `Time: ${v}s`}
               />
-              <Area type="monotone" dataKey="hullDrag" stroke="#64748b" strokeWidth={3} fillOpacity={1} fill="url(#colorDrag)" />
+              <Area type="monotone" dataKey="hullDrag" stroke="#64748b" strokeWidth={3} fillOpacity={1} fill="url(#colorDrag)" isAnimationActive={false} />
               <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
             </AreaChart>
           </ResponsiveContainer>
@@ -160,8 +158,8 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
           </div>
           
           <div className="flex-1 min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={results} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ComposedChart data={results} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
@@ -182,20 +180,23 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
                 <Tooltip 
                   content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
+                    if (active && payload && payload.length >= 2) {
+                      const point = payload[0]?.payload as SimulationResult | undefined;
+                      const netForce = Number(payload[0]?.value ?? 0);
+                      const slip = Number(payload[1]?.value ?? 0);
                       return (
                         <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs">
-                          <p className="font-bold mb-1">Time: {payload[0].payload.time.toFixed(2)}s</p>
-                          <p className="text-indigo-400">Net Force: {payload[0].value.toFixed(1)}N</p>
-                          <p className="text-rose-400">Slip: {payload[1].value.toFixed(2)}m/s</p>
+                          <p className="font-bold mb-1">Time: {(point?.time ?? 0).toFixed(2)}s</p>
+                          <p className="text-indigo-400">Net Force: {netForce.toFixed(1)}N</p>
+                          <p className="text-rose-400">Slip: {slip.toFixed(2)}m/s</p>
                         </div>
                       );
                     }
                     return null;
                   }}
                 />
-                <Area yAxisId="left" type="monotone" dataKey="netForce" stroke="#6366f1" fillOpacity={1} fill="url(#colorNet)" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="slip" stroke="#f43f5e" strokeWidth={2} dot={false} />
+                <Area yAxisId="left" type="monotone" dataKey="netForce" stroke="#6366f1" fillOpacity={1} fill="url(#colorNet)" strokeWidth={2} isAnimationActive={false} />
+                <Line yAxisId="right" type="monotone" dataKey="slip" stroke="#f43f5e" strokeWidth={2} dot={false} isAnimationActive={false} />
                 <ReferenceLine yAxisId="left" x={currentTime} stroke="#334155" strokeDasharray="3 3" />
                 
                 {zeroSlipPoints.map((point, idx) => (
@@ -232,7 +233,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                     />
                   </React.Fragment>
                 ))}
-              </AreaChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -243,7 +244,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
             <Maximize2 className="w-4 h-4 text-blue-500" />
             System Velocity (m/s)
           </h3>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <LineChart data={results}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis
@@ -260,7 +261,7 @@ export function DetailedCharts({ results, zeroSlipPoints, zeroSlipPoint, current
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
                 labelFormatter={(v) => `Time: ${v}s`}
               />
-              <Line type="monotone" dataKey="boatVelocity" stroke="#3b82f6" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="boatVelocity" stroke="#3b82f6" strokeWidth={3} dot={false} isAnimationActive={false} />
               <ReferenceLine x={currentTime} stroke="#334155" strokeDasharray="3 3" />
             </LineChart>
           </ResponsiveContainer>

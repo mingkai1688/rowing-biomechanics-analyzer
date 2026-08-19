@@ -2,7 +2,7 @@ import React, { useState, useMemo, Suspense, useEffect, useRef } from 'react';
 import { 
   Settings2, Activity, User, Anchor
 } from 'lucide-react';
-import { simulateStroke, calculateSensitivity } from './services/rowingModel';
+import { simulateStroke, calculateSensitivity, getAchievedStrokeRate, getAverageBoatSpeed } from './services/rowingModel';
 import { RowerAnatomy, BoatSetup, StrokeParams, SimulationResult } from './types';
 import { ControlSlider } from './components/ControlSlider';
 import { Visualizer } from './components/Visualizer';
@@ -55,8 +55,6 @@ export default function App() {
     return points;
   }, [results]);
 
-  const zeroSlipPoint = zeroSlipPoints[0];
-
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -88,15 +86,33 @@ export default function App() {
     return () => cancelAnimationFrame(animationRef.current);
   }, [isPlaying, playbackSpeed, results]);
 
-  const currentData = results.find(r => r.time >= currentTime) || results[0];
+  // Binary search for the first sample whose time >= currentTime. results is
+  // strictly time-ordered, so this is O(log N) per animation frame instead of O(N).
+  const currentData = useMemo(() => {
+    if (results.length === 0) return undefined;
+    let lo = 0;
+    let hi = results.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (results[mid].time >= currentTime) hi = mid;
+      else lo = mid + 1;
+    }
+    return results[lo];
+  }, [results, currentTime]) ?? results[0];
 
   const averageSpeed = useMemo(() => {
-    const sum = results.reduce((acc, r) => acc + r.boatVelocity, 0);
-    return (sum / results.length).toFixed(2);
+    return getAverageBoatSpeed(results).toFixed(2);
   }, [results]);
 
+  const achievedStrokeRate = useMemo(() => getAchievedStrokeRate(results), [results]);
+  const rateIsConstrained = Math.abs(achievedStrokeRate - params.strokeRate) > 1;
+
   const maxForce = useMemo(() => {
-    return Math.max(...results.map(r => r.propulsiveForce)).toFixed(0);
+    let max = -Infinity;
+    for (const r of results) {
+      if (r.propulsiveForce > max) max = r.propulsiveForce;
+    }
+    return (max === -Infinity ? 0 : max).toFixed(0);
   }, [results]);
 
   return (
@@ -116,6 +132,16 @@ export default function App() {
           <div className="text-right">
             <p className="text-xs text-slate-500 font-medium tracking-tighter">AVG SPEED</p>
             <p className="text-2xl font-bold text-blue-600">{averageSpeed} <span className="text-sm font-normal text-slate-400">m/s</span></p>
+          </div>
+          <div className="h-10 w-px bg-slate-200" />
+          <div className="text-right">
+            <p className="text-xs text-slate-500 font-medium tracking-tighter">ACHIEVED RATE</p>
+            <p className={`text-2xl font-bold ${rateIsConstrained ? 'text-amber-600' : 'text-blue-600'}`}>
+              {achievedStrokeRate.toFixed(1)} <span className="text-sm font-normal text-slate-400">spm</span>
+            </p>
+            {rateIsConstrained && (
+              <p className="text-xs font-semibold text-amber-600">Requested {params.strokeRate} spm</p>
+            )}
           </div>
           <div className="h-10 w-px bg-slate-200" />
           <div className="text-right">
@@ -162,7 +188,7 @@ export default function App() {
               <ControlSlider label="Rate (spm)" value={params.strokeRate} min={18} max={45} step={1} onChange={v => setParams(prev => ({...prev, strokeRate: v}))} />
               <ControlSlider label="Handle Force (N)" value={params.maxHandleForce} min={200} max={1200} step={10} onChange={v => setParams(prev => ({...prev, maxHandleForce: v}))} />
               <div>
-                <ControlSlider label="Drive Peak Timing (%)" value={Math.round(params.peakForcePercent * 100)} min={10} max={90} step={5} onChange={v => setParams(prev => ({...prev, peakForcePercent: v / 100}))} />
+                <ControlSlider label="Drive Peak Timing (%)" value={Math.round(params.peakForcePercent * 100)} min={20} max={80} step={5} onChange={v => setParams(prev => ({...prev, peakForcePercent: v / 100}))} />
                 <div className="flex justify-between text-xs text-slate-400 mt-1">
                   <span>Early Drive</span>
                   <span>Late Drive</span>
@@ -190,17 +216,16 @@ export default function App() {
             />
 
             <Suspense fallback={<div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex items-center justify-center text-slate-500 animate-pulse">Loading analysis...</div>}>
-              <SensitivityChart sensitivities={sensitivities} results={results} />
+              <SensitivityChart sensitivities={sensitivities} />
             </Suspense>
           </div>
 
           {/* Bottom Row: Detailed Charts & Insights */}
           <Suspense fallback={<div className="h-[350px] bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex items-center justify-center text-slate-500 animate-pulse">Loading charts...</div>}>
-            <DetailedCharts 
-              results={results} 
-              zeroSlipPoints={zeroSlipPoints} 
-              zeroSlipPoint={zeroSlipPoint} 
-              currentTime={currentTime} 
+            <DetailedCharts
+              results={results}
+              zeroSlipPoints={zeroSlipPoints}
+              currentTime={currentTime}
             />
           </Suspense>
 

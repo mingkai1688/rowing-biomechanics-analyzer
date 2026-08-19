@@ -1,13 +1,14 @@
 import React from 'react';
 
-export function ControlSlider({ label, value, min, max, step, onChange }: { 
-  label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void 
+export function ControlSlider({ label, value, min, max, step, onChange }: {
+  label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void
 }) {
+  const decimals = Number.isInteger(step) ? 0 : step >= 0.1 ? 1 : 2;
   return (
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <label className="text-sm font-medium text-slate-600">{label}</label>
-        <span className="text-sm font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">{value.toFixed(step >= 0.1 ? 1 : 2)}</span>
+        <span className="text-sm font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">{value.toFixed(decimals)}</span>
       </div>
       <input 
         type="range" 

@@ -16,7 +16,7 @@ export interface StrokeParams {
   strokeRate: number; // strokes per minute
   maxHandleForce: number; // Newtons
   cycles: number; // number of stroke cycles to simulate
-  peakForcePercent: number; // 0.2–0.8, position of peak ω within the drive
+  peakForcePercent: number; // 0.2-0.8, position of peak handle force within the drive
 }
 
 export interface SimulationResult {
