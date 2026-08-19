@@ -243,6 +243,79 @@ describe('simulateStroke', () => {
     );
   });
 
+  // Characterisation test for the drive loop's exit behaviour. The oar angle must
+  // advance monotonically toward the finish: omega cannot go negative, because it
+  // starts at zero with positive angular acceleration and any later excess of blade
+  // reaction over handle torque reduces blade speed, which reduces F_norm, which
+  // pushes the acceleration back toward zero. Underpowered strokes therefore creep
+  // forward until the 5s time cap rather than reversing. This pins the invariant that
+  // the removed `omega < 0` break was nominally guarding.
+  it('never lets the oar drift back toward the catch during the drive', () => {
+    const cases: Array<{ anatomy: RowerAnatomy; setup: BoatSetup; params: StrokeParams }> = [
+      { anatomy, setup, params },
+      {
+        // Weakest rower, worst leverage, longest arc, latest peak: the most
+        // stall-prone corner of the slider ranges. This one fails to reach the
+        // finish angle at all, so it exercises the incomplete-drive path.
+        anatomy: { legLength: 1.2, trunkLength: 0.9, armLength: 0.75 },
+        setup: { inboard: 0.7, outboard: 2.2, span: 1.6 },
+        params: {
+          ...params, catchAngle: 80, finishAngle: -50, strokeRate: 18,
+          maxHandleForce: 200, peakForcePercent: 0.8,
+        },
+      },
+      {
+        anatomy: { legLength: 0.7, trunkLength: 0.5, armLength: 0.6 },
+        setup: { inboard: 0.75, outboard: 2.1, span: 1.6 },
+        params: { ...params, catchAngle: 75, finishAngle: -45, strokeRate: 18, maxHandleForce: 230 },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const results = simulateStroke(testCase.anatomy, testCase.setup, testCase.params);
+
+      // Compare only within a single drive. Each cycle restarts at the catch, so a
+      // Recovery sample resets the comparison rather than counting as a reversal.
+      let previousDriveAngle: number | null = null;
+      for (const result of results) {
+        if (result.phase === 'Recovery') {
+          previousDriveAngle = null;
+          continue;
+        }
+        if (previousDriveAngle !== null) {
+          assert.ok(
+            result.oarAngle <= previousDriveAngle + 1e-9,
+            `oar angle went backwards: ${previousDriveAngle} -> ${result.oarAngle}`,
+          );
+        }
+        previousDriveAngle = result.oarAngle;
+      }
+    }
+  });
+
+  it('bounds an unachievable drive with the time cap rather than an early break', () => {
+    // 200N with the worst leverage and a late force peak cannot reach the finish
+    // angle. The drive must run to the 5s cap; an earlier exit would mean some
+    // other break condition fired.
+    const finishAngle = -50;
+    const stalled = simulateStroke(
+      { legLength: 1.2, trunkLength: 0.9, armLength: 0.75 },
+      { inboard: 0.7, outboard: 2.2, span: 1.6 },
+      {
+        ...params, catchAngle: 80, finishAngle, strokeRate: 18,
+        maxHandleForce: 200, peakForcePercent: 0.8, cycles: 1,
+      },
+    );
+    const drive = stalled.filter((result) => result.phase !== 'Recovery');
+    const driveTime = drive.length * 0.01;
+
+    assert.ok(
+      drive.at(-1)!.oarAngle - finishAngle > 2,
+      `expected a stall, but the drive reached ${drive.at(-1)!.oarAngle}deg`,
+    );
+    assert.ok(driveTime >= 4.95, `expected the 5s time cap to bound the drive, got ${driveTime}s`);
+  });
+
   it('shifts the propulsive impulse forward when peakForcePercent moves later', () => {
     // peakForcePercent shifts the handle-force envelope, which biases the
     // distribution of propulsive impulse across the drive. Late-peak runs should

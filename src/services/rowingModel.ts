@@ -55,11 +55,17 @@ export function simulateStroke(
     // 1. DRIVE PHASE (Dynamic Integration)
     const driveResults: SimulationResult[] = [];
     // We integrate until the oar angle reaches the finish angle, preserving geometric constraints.
-    // The omega < 0 stall guard prevents underpowered runs from looping until the 5s safety cap:
-    // if the rower can't overcome blade reaction, omega flips negative and theta would drift back
-    // toward the catch, producing nonsense samples.
+    // The 5s cap is what actually bounds an underpowered stroke. When the rower cannot overcome
+    // blade reaction the oar creeps forward rather than reversing, so the loop needs a time bound
+    // and not only an angular one: omega starts at zero with positive angular acceleration (the
+    // force envelope is never zero at the catch), and any later excess of blade reaction over
+    // handle torque slows the oar, which cuts blade speed, which cuts F_norm, pushing the
+    // acceleration back toward zero. That negative feedback keeps omega above zero.
+    // An `omega < 0` break used to sit here to stop theta drifting back toward the catch. It never
+    // fired anywhere in the slider ranges, so it was removed; the invariant it claimed to protect
+    // is pinned by tests instead. Drives that exit here short of finishRad hand off to recovery
+    // from their actual terminal state (see driveEndTheta below).
     while (theta > finishRad && t_cycle < 5.0) {
-      if (omega < 0 && t_cycle > 0.05) break;
       const progress = (catchRad - theta) / totalAngle;
       
       let phaseMul = 1;
@@ -145,8 +151,8 @@ export function simulateStroke(
     const minRecoveryTime = Math.sqrt(6 * slideLength / MAX_SEAT_ACCEL);
     const recoveryTime = Math.max(minRecoveryTime, T - driveTime);
 
-    // The drive does not always reach finishRad: it also exits on the 5s safety cap or
-    // the omega < 0 stall guard when the rower cannot overcome blade reaction. Recovery
+    // The drive does not always reach finishRad: it exits on the 5s safety cap when the
+    // rower cannot overcome blade reaction within that budget. Recovery
     // must therefore start from wherever the oar and seat actually ended up, otherwise
     // an underpowered stroke teleports the oar to the finish and the seat to full slide
     // in a single step, and fabricates recovery accelerations for travel that never
